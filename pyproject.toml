@@ -1,0 +1,65 @@
+[project]
+name = "transaction-analysis"
+version = "0.1.0"
+description = ""
+authors = [
+    {name = "Evgeniy Alekseev",email = "e7777777a@gmail.com"}
+]
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "requests (>=2.32.4,<3.0.0)"
+]
+
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.poetry.group.lint.dependencies]
+flake8 = "^7.3.0"
+mypy = "^1.17.0"
+black = "^25.1.0"
+isort = "^6.0.1"
+
+[tool.mypy]
+# запрещает объявлять функции без аннотации типов
+disallow_untyped_defs = true
+# проверяет корректность типизации в функции без аннотаций
+check_untyped_defs = false
+# без этой опции аргументы функции могут иметь тип None в качестве параметра по умолчанию
+no_implicit_optional = true
+# предупреждает, если в качестве возвращаемого типа было указано Any
+warn_return_any = true
+# сключения для проверки
+exclude = 'venv'
+#  включает все опциональные дополнительные проверки
+strict = false
+# сообщает, если какой-то кусок кода никогда не выполняется
+warn_unreachable = true
+
+
+[tool.black]
+# Максимальная длина строки
+line-length = 119
+# Файлы, которые не нужно форматировать
+exclude = '''
+(
+  /(
+      \.eggs         # Исключить несколько общих каталогов
+    | \.git          # в корне проекта
+    | \.hg
+    | \.mypy_cache
+    | \.tox
+    | \.venv
+    | dist
+  )/
+  | foo.py           # Также отдельно исключить файл с именем foo.py
+                     # в корне проекта
+)
+'''
+
+
+[tool.isort]
+# максимальная длина строки
+line_length = 119
