@@ -1,7 +1,6 @@
 from typing import List, Dict, Any
 from datetime import datetime
 import logging
-import functools
 
 
 def investment_bank(month: str, transactions: List[Dict[str, Any]], limit: int) -> float:
@@ -20,7 +19,7 @@ def investment_bank(month: str, transactions: List[Dict[str, Any]], limit: int) 
         raise ValueError("Предел округления должен быть 10, 50 или 100 ₽.")
 
     total_saved = 0.0
-    year, month_num = map(int, month.split('-'))
+    year, month_num = map(int, month.split("-"))
 
     for transaction in transactions:
         try:
