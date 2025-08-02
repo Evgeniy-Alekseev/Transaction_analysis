@@ -121,8 +121,12 @@ def calculate_card_stats(df: pd.DataFrame) -> List[Dict[str, Any]]:
         cashback = total_spent // 100
 
         # Топ-5 транзакций по сумме платежа (по модулю)
-        top_transactions = card_df.nlargest(5, 'Сумма платежа', key=abs)[
-            ['Дата операции', 'Сумма платежа', 'Категория', 'Описание']].to_dict('records')
+        card_df_copy = card_df.copy()
+        card_df_copy['Abs_Summa_platezha'] = card_df_copy['Сумма платежа'].abs()
+        top_transactions_df = card_df_copy.nlargest(5, 'Abs_Summa_platezha')
+        top_transactions = top_transactions_df[
+            ['Дата операции', 'Сумма платежа', 'Категория', 'Описание']
+        ].to_dict('records')
         # Форматируем дату для JSON
         for t in top_transactions:
             t['Дата операции'] = t['Дата операции'].strftime('%d.%m.%Y %H:%M:%S') if pd.notna(
