@@ -6,23 +6,49 @@ import requests
 from typing import List, Dict, Any, Optional
 import os
 
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
 
-def load_transactions(file_path: str) -> pd.DataFrame:
-    """Загружает транзакции из Excel файла."""
+def load_transactions(file_path: Optional[str] = None) -> pd.DataFrame:
+    """
+    Загружает транзакции из Excel файла.
+    Если путь не указан, пытается загрузить из стандартного местоположения.
+    """
+    if file_path is None:
+        # Предполагаем, что файл лежит в ../data/operations.xlsx относительно src/
+        # Это работает, если main.py запускается из корня проекта как python -m src.main
+        file_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'data', 'operations.xlsx')
+        logger.info(f"Путь к файлу транзакций не указан. Используется путь по умолчанию: {file_path}")
+
+    if not os.path.exists(file_path):
+        logger.error(f"Файл транзакций не найден: {file_path}")
+        raise FileNotFoundError(f"Файл транзакций не найден: {file_path}")
+
     logger.info(f"Загрузка транзакций из {file_path}")
-    df = pd.read_excel(file_path)
-    # Удаление строк с заголовками, если они повторяются
-    df = df[df['Дата операции'] != 'Дата операции']
+    try:
+        df = pd.read_excel(file_path)
+    except Exception as e:
+        logger.error(f"Ошибка при чтении Excel файла: {e}")
+        raise
+
+
     # Преобразование дат
     df['Дата операции'] = pd.to_datetime(df['Дата операции'], format='%d.%m.%Y %H:%M:%S', errors='coerce')
     df['Дата платежа'] = pd.to_datetime(df['Дата платежа'], format='%d.%m.%Y', errors='coerce')
+
     # Преобразование сумм в числа
-    for col in ['Сумма операции', 'Сумма платежа', 'Кэшбэк', 'Бонусы (включая кэшбэк)', 'Округление на инвесткопилку',
-                'Сумма операции с округлением']:
+    for col in [
+        'Сумма операции',
+        'Сумма платежа',
+        'Кэшбэк',
+        'Бонусы (включая кэшбэк)',
+        'Округление на инвесткопилку',
+        'Сумма операции с округлением'
+    ]:
         if col in df.columns:
             df[col] = pd.to_numeric(df[col], errors='coerce')
+
     logger.info(f"Загружено {len(df)} транзакций")
     return df
 
@@ -31,7 +57,7 @@ def filter_transactions_by_date(df: pd.DataFrame, end_date: datetime) -> pd.Data
     """Фильтрует транзакции с начала месяца до end_date."""
     start_of_month = end_date.replace(day=1)
     logger.info(f"Фильтрация транзакций с {start_of_month.strftime('%Y-%m-%d')} по {end_date.strftime('%Y-%m-%d')}")
-    mask = (df['Дата операции'] >= start_of_month) & (df['Дата операции'] <= end_date)
+    mask = (df["Дата операции"] >= start_of_month) & (df["Дата операции"] <= end_date)
     return df.loc[mask].copy()
 
 
@@ -52,7 +78,7 @@ def load_user_settings(settings_path: str = "user_settings.json") -> Dict[str, A
     if not os.path.exists(settings_path):
         logger.warning(f"Файл настроек {settings_path} не найден. Используются значения по умолчанию.")
         return {"user_currencies": [], "user_stocks": []}
-    with open(settings_path, 'r', encoding='utf-8') as f:
+    with open(settings_path, "r", encoding="utf-8") as f:
         return json.load(f)
 
 
@@ -104,38 +130,41 @@ def calculate_card_stats(df: pd.DataFrame) -> List[Dict[str, Any]]:
     """Рассчитывает статистику по картам."""
     cards_data = []
     # Фильтруем только расходы (отрицательные суммы)
-    expenses_df = df[df['Сумма операции'] < 0].copy()
+    expenses_df = df[df["Сумма операции"] < 0].copy()
 
-    if 'Номер карты' not in expenses_df.columns:
+    if "Номер карты" not in expenses_df.columns:
         logger.warning("Столбец 'Номер карты' не найден в данных.")
         return cards_data
 
-    for card_number in expenses_df['Номер карты'].dropna().unique():
-        card_df = expenses_df[expenses_df['Номер карты'] == card_number]
+    for card_number in expenses_df["Номер карты"].dropna().unique():
+        card_df = expenses_df[expenses_df["Номер карты"] == card_number]
 
         last_digits = card_number[-4:] if isinstance(card_number, str) else "N/A"
 
-        total_spent = abs(card_df['Сумма операции'].sum())
+        total_spent = abs(card_df["Сумма операции"].sum())
 
         # Кэшбэк: 1 рубль на каждые 100 рублей
         cashback = total_spent // 100
 
         # Топ-5 транзакций по сумме платежа (по модулю)
         card_df_copy = card_df.copy()
-        card_df_copy['Abs_Summa_platezha'] = card_df_copy['Сумма платежа'].abs()
-        top_transactions_df = card_df_copy.nlargest(5, 'Abs_Summa_platezha')
-        top_transactions = top_transactions_df[
-            ['Дата операции', 'Сумма платежа', 'Категория', 'Описание']
-        ].to_dict('records')
+        card_df_copy["Abs_Summa_platezha"] = card_df_copy["Сумма платежа"].abs()
+        top_transactions_df = card_df_copy.nlargest(5, "Abs_Summa_platezha")
+        top_transactions = top_transactions_df[["Дата операции", "Сумма платежа", "Категория", "Описание"]].to_dict(
+            "records"
+        )
         # Форматируем дату для JSON
         for t in top_transactions:
-            t['Дата операции'] = t['Дата операции'].strftime('%d.%m.%Y %H:%M:%S') if pd.notna(
-                t['Дата операции']) else None
+            t["Дата операции"] = (
+                t["Дата операции"].strftime("%d.%m.%Y %H:%M:%S") if pd.notna(t["Дата операции"]) else None
+            )
 
-        cards_data.append({
-            "last_digits": last_digits,
-            "total_spent": round(total_spent, 2),
-            "cashback": cashback,
-            "top_transactions": top_transactions
-        })
+        cards_data.append(
+            {
+                "last_digits": last_digits,
+                "total_spent": round(total_spent, 2),
+                "cashback": cashback,
+                "top_transactions": top_transactions,
+            }
+        )
     return cards_data
