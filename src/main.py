@@ -7,6 +7,7 @@ import json
 import pandas as pd
 from datetime import datetime
 import logging
+from dotenv import load_dotenv
 
 # Настройка логирования для main
 logging.basicConfig(level=logging.INFO, format='%(name)s - %(levelname)s - %(message)s')
@@ -17,6 +18,8 @@ from src.utils import load_transactions
 from src.views import main_page
 from src.reports import spending_by_weekday
 from src.services import investment_bank_from_df
+
+load_dotenv()
 
 def run_main_page(date_time_str: str, data_file: str):
     """Запуск функциональности 'Главная'."""

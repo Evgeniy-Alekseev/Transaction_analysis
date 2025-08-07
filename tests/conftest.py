@@ -1,5 +1,6 @@
 import pandas as pd
 import pytest
+from unittest.mock import Mock
 
 
 @pytest.fixture
@@ -23,7 +24,6 @@ def sample_transactions_df():
         'Сумма операции с округлением': [135.47, 273.90, 129.00, 4.94]
     }
     df = pd.DataFrame(data)
-    # Преобразование дат, как в utils.py
     df['Дата операции'] = pd.to_datetime(df['Дата операции'], format='%d.%m.%Y %H:%M:%S', errors='coerce')
     df['Дата платежа'] = pd.to_datetime(df['Дата платежа'], format='%d.%m.%Y', errors='coerce')
     return df
@@ -51,26 +51,22 @@ def temp_user_settings_file(tmp_path):
         json.dump(settings_content, f, ensure_ascii=False, indent=4)
     return str(settings_file) # Возвращаем путь к файлу как строку
 
+
 @pytest.fixture
 def mock_api_responses():
-    """Фикстура для мокирования API ответов."""
-    from unittest.mock import Mock
-    # Мок для курсов валют
     mock_currency_response = Mock()
     mock_currency_response.json.return_value = {
+        "success": True,
+        "base": "RUB",
         "rates": {"USD": 75.0, "EUR": 85.0}
     }
     mock_currency_response.raise_for_status.return_value = None
 
-    # Мок для цен на акции (заглушка, так как нужен ключ API)
-    # В реальности можно было бы мокать конкретный вызов requests.get с определенным URL
-    # Но для простоты просто возвращаем фиктивные данные
     mock_stock_response = Mock()
-    mock_stock_response.json.return_value = {
-        "Global Quote": {
-            "05. price": "150.00"
-        }
-    }
+    mock_stock_response.json.return_value = [
+        {"name": "Apple Inc.", "symbol": "AAPL", "price": 150.00},
+        {"name": "Amazon.com Inc.", "symbol": "AMZN", "price": 3200.00},
+    ]
     mock_stock_response.raise_for_status.return_value = None
 
     return {
@@ -78,7 +74,6 @@ def mock_api_responses():
         "stock": mock_stock_response
     }
 
-# --- Фикстуры для тестирования отчетов ---
 
 @pytest.fixture
 def sample_report_transactions_df():
@@ -117,3 +112,28 @@ def sample_report_transactions_df():
     df = pd.DataFrame(data)
     df['Дата операции'] = pd.to_datetime(df['Дата операции'])
     return df
+
+@pytest.fixture
+def temp_data_file(tmp_path):
+    """Создает временный файл с тестовыми данными."""
+    # Используем данные из sample_transactions_df
+    df = pd.DataFrame({
+        'Дата операции': ['25.10.2021 13:49:19', '25.10.2021 13:11:51'],
+        'Дата платежа': ['25.10.2021', '25.10.2021'],
+        'Номер карты': ['*7197', '*7197'],
+        'Статус': ['OK', 'OK'],
+        'Сумма операции': [-135.47, -273.90],
+        'Валюта операции': ['RUB', 'RUB'],
+        'Сумма платежа': [-135.47, -273.90],
+        'Валюта платежа': ['RUB', 'RUB'],
+        'Кэшбэк': [0.0, 5.0],
+        'Категория': ['Супермаркеты', 'Косметика'],
+        'MCC': [5411, 5977],
+        'Описание': ['Колхоз', 'Улыбка радуги'],
+        'Бонусы (включая кэшбэк)': [2.00, 5.00],
+        'Округление на инвесткопилку': [0.00, 0.00],
+        'Сумма операции с округлением': [135.47, 273.90]
+    })
+    data_file = tmp_path / "test_data.xlsx"
+    df.to_excel(data_file, index=False)
+    return str(data_file)

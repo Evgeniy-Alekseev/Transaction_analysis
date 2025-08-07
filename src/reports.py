@@ -1,10 +1,10 @@
-import functools
-import json
-import logging
+import pandas as pd
 from datetime import datetime, timedelta
 from typing import Optional
-
-import pandas as pd
+import logging
+import functools
+import json
+import os
 
 logger = logging.getLogger(__name__)
 
@@ -48,7 +48,7 @@ def spending_by_weekday(transactions: pd.DataFrame, date: Optional[str] = None) 
     else:
         end_date = datetime.now()
 
-    start_date = end_date - timedelta(days=90)  # Примерно 3 месяца
+    start_date = end_date - timedelta(days=90)  
 
     # Фильтруем транзакции
     mask = (
@@ -60,7 +60,7 @@ def spending_by_weekday(transactions: pd.DataFrame, date: Optional[str] = None) 
 
     if filtered_df.empty:
         logger.warning("Нет данных для отчета за указанный период.")
-        return pd.DataFrame()
+        return pd.DataFrame(columns=['weekday', 'average_spent'])
 
     # Добавляем день недели
     filtered_df["weekday"] = filtered_df["Дата операции"].dt.day_name()

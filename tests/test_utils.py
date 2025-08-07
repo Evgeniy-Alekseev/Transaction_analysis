@@ -97,3 +97,21 @@ def test_calculate_card_stats(sample_transactions_df):
     # Проверим, что транзакции отсортированы по сумме (по модулю)
     top_amounts = [abs(t['Сумма платежа']) for t in card_stat["top_transactions"]]
     assert top_amounts == sorted(top_amounts, reverse=True)
+
+
+def test_calculate_card_stats_no_cards(sample_transactions_df):
+    empty_df = pd.DataFrame(columns=sample_transactions_df.columns)
+    empty_df['Дата операции'] = pd.to_datetime(empty_df['Дата операции'], errors='coerce')
+    empty_df['Дата платежа'] = pd.to_datetime(empty_df['Дата платежа'], errors='coerce')
+    for col in ['Сумма операции', 'Сумма платежа', 'Кэшбэк', 'Бонусы (включая кэшбэк)', 'Округление на инвесткопилку', 'Сумма операции с округлением']:
+        if col in empty_df.columns:
+             empty_df[col] = pd.to_numeric(empty_df[col], errors='coerce')
+    
+    stats = calculate_card_stats(empty_df)
+    assert stats == []
+
+def test_calculate_card_stats_nan_cards(sample_transactions_df):
+    df_with_nan = sample_transactions_df.copy()
+    df_with_nan['Номер карты'] = None # Все значения NaN
+    stats = calculate_card_stats(df_with_nan)
+    assert stats == []

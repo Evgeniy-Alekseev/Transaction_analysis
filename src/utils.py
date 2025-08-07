@@ -17,7 +17,7 @@ def load_transactions(file_path: Optional[str] = None) -> pd.DataFrame:
     """
     if file_path is None:
         # Предполагаем, что файл лежит в ../data/operations.xlsx относительно src/
-        # Это работает, если main.py запускается из корня проекта как python -m src.main
+        # Требуется для main.py при запуске из корня проекта как python -m src.main
         file_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'data', 'operations.xlsx')
         logger.info(f"Путь к файлу транзакций не указан. Используется путь по умолчанию: {file_path}")
 
@@ -31,7 +31,6 @@ def load_transactions(file_path: Optional[str] = None) -> pd.DataFrame:
     except Exception as e:
         logger.error(f"Ошибка при чтении Excel файла: {e}")
         raise
-
 
     # Преобразование дат
     df['Дата операции'] = pd.to_datetime(df['Дата операции'], format='%d.%m.%Y %H:%M:%S', errors='coerce')
@@ -78,93 +77,155 @@ def load_user_settings(settings_path: str = "user_settings.json") -> Dict[str, A
     if not os.path.exists(settings_path):
         logger.warning(f"Файл настроек {settings_path} не найден. Используются значения по умолчанию.")
         return {"user_currencies": [], "user_stocks": []}
-    with open(settings_path, "r", encoding="utf-8") as f:
-        return json.load(f)
+    try:
+        with open(settings_path, 'r', encoding='utf-8') as f:
+            return json.load(f)
+    except json.JSONDecodeError as e:
+        logger.error(f"Ошибка декодирования JSON в файле {settings_path}: {e}")
+        return {"user_currencies": [], "user_stocks": []}
 
 
 def get_currency_rates(currencies: List[str]) -> List[Dict[str, Any]]:
-    """Получает курс валют с API (например, exchangerate-api.com)."""
+    """Получает курс валют с API."""
     rates = []
     if not currencies:
         return rates
+
+    api_key = os.getenv("CURRENCY_API_KEY")
+    if not api_key:
+        logger.error("API-ключ CURRENCY_API_KEY не найден в переменных окружения.")
+        for curr in currencies:
+            rates.append({"currency": curr, "rate": None})
+        return rates
+
     try:
-        # Используем бесплатный API для примера
-        url = "https://api.exchangerate-api.com/v4/latest/RUB"
-        response = requests.get(url, timeout=10)
+        # Исправленный URL
+        url = "https://api.apilayer.com/exchangerates_data/latest"
+        headers = {
+            "apikey": api_key
+        }
+        params = {
+            "base": "RUB",
+            "symbols": ",".join(currencies)
+        }
+
+        response = requests.get(url, headers=headers, params=params, timeout=10)
         response.raise_for_status()
         data = response.json()
+
+        if data.get("success") is False:
+            error_info = data.get("error", {}).get("info", "Неизвестная ошибка API")
+            logger.error(f"Ошибка API exchangerates_ {error_info}")
+            raise requests.exceptions.RequestException(error_info)
+
         rub_rates = data.get("rates", {})
         for curr in currencies:
             rate = rub_rates.get(curr, None)
             rates.append({"currency": curr, "rate": rate})
+
+    except requests.exceptions.RequestException as e:
+        logger.error(f"Ошибка сети или запроса к API exchangerates_ {e}")
+        for curr in currencies:
+            rates.append({"currency": curr, "rate": None})
+    except json.JSONDecodeError as e:
+        logger.error(f"Ошибка декодирования JSON ответа от API: {e}")
+        for curr in currencies:
+            rates.append({"currency": curr, "rate": None})
     except Exception as e:
         logger.error(f"Ошибка при получении курсов валют: {e}")
-        # Возвращаем пустые значения в случае ошибки
         for curr in currencies:
             rates.append({"currency": curr, "rate": None})
     return rates
 
 
 def get_stock_prices(stocks: List[str]) -> List[Dict[str, Any]]:
-    """Получает цены на акции с API (например, alphavantage)."""
+    """
+    Получает цены на акции из API-Ninjas S&P 500.
+    """
     prices = []
     if not stocks:
         return prices
-    try:
-        # Alpha Vantage требует API ключ, для демонстрации используем mock данные
-        # url = f"https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol={symbol}&apikey={API_KEY}"
-        # response = requests.get(url)
-        # data = response.json()
-        # price = data.get("Global Quote", {}).get("05. price", None)
-        # Для упрощения, используем мок
-        for stock in stocks:
-            prices.append({"stock": stock, "price": "N/A (API Key Required)"})
-    except Exception as e:
-        logger.error(f"Ошибка при получении цен на акции: {e}")
+
+    api_key = os.getenv("STOCKS_API_KEY")
+    if not api_key:
+        logger.error("API-ключ STOCKS_API_KEY не найден в переменных окружения.")
         for stock in stocks:
             prices.append({"stock": stock, "price": None})
+        return prices
+
+    try:
+        # Исправленный URL
+        url = "https://api.api-ninjas.com/v1/sp500"
+        headers = {
+            "X-Api-Key": api_key
+        }
+
+        logger.debug(f"Запрос списка компаний S&P 500 по адресу: {url}")
+        response = requests.get(url, headers=headers, timeout=10)
+        response.raise_for_status()
+        all_sp500_data = response.json()
+
+        sp500_prices_dict = {item['symbol']: item['price'] for item in all_sp500_data}
+
+        for stock_symbol in stocks:
+            price = sp500_prices_dict.get(stock_symbol)
+            if price is not None:
+                prices.append({"stock": stock_symbol, "price": price})
+                logger.debug(f"Цена для {stock_symbol}: {price}")
+            else:
+                prices.append({"stock": stock_symbol, "price": None})
+                logger.warning(f"Цена для акции {stock_symbol} не найдена в данных S&P 500.")
+
+    except requests.exceptions.RequestException as e:
+        logger.error(f"Ошибка сети или запроса к API-Ninjas S&P 500: {e}")
+        for stock in stocks:
+            prices.append({"stock": stock, "price": None})
+    except json.JSONDecodeError as e:
+        logger.error(f"Ошибка декодирования JSON ответа от API-Ninjas: {e}")
+        for stock in stocks:
+            prices.append({"stock": stock, "price": None})
+    except Exception as e:
+        logger.error(f"Неожиданная ошибка при получении цен на акции: {e}")
+        for stock in stocks:
+            prices.append({"stock": stock, "price": None})
+
     return prices
 
 
 def calculate_card_stats(df: pd.DataFrame) -> List[Dict[str, Any]]:
     """Рассчитывает статистику по картам."""
     cards_data = []
-    # Фильтруем только расходы (отрицательные суммы)
-    expenses_df = df[df["Сумма операции"] < 0].copy()
-
-    if "Номер карты" not in expenses_df.columns:
-        logger.warning("Столбец 'Номер карты' не найден в данных.")
+    expenses_df = df[df['Сумма операции'] < 0].copy()
+    
+    if 'Номер карты' not in expenses_df.columns or expenses_df['Номер карты'].isna().all():
+        logger.warning("Столбец 'Номер карты' не найден в данных или все значения NaN.")
         return cards_data
 
-    for card_number in expenses_df["Номер карты"].dropna().unique():
-        card_df = expenses_df[expenses_df["Номер карты"] == card_number]
+    for card_number in expenses_df['Номер карты'].dropna().unique():
+        card_df = expenses_df[expenses_df['Номер карты'] == card_number]
+        
+        # Убедимся, что card_number - строка
+        card_number_str = str(card_number)
+        last_digits = card_number_str[-4:] if len(card_number_str) >= 4 else card_number_str
 
-        last_digits = card_number[-4:] if isinstance(card_number, str) else "N/A"
-
-        total_spent = abs(card_df["Сумма операции"].sum())
-
-        # Кэшбэк: 1 рубль на каждые 100 рублей
+        total_spent = abs(card_df['Сумма операции'].sum())
         cashback = total_spent // 100
-
-        # Топ-5 транзакций по сумме платежа (по модулю)
+        
+        # Используем nlargest с временным столбцом для совместимости
         card_df_copy = card_df.copy()
-        card_df_copy["Abs_Summa_platezha"] = card_df_copy["Сумма платежа"].abs()
-        top_transactions_df = card_df_copy.nlargest(5, "Abs_Summa_platezha")
-        top_transactions = top_transactions_df[["Дата операции", "Сумма платежа", "Категория", "Описание"]].to_dict(
-            "records"
-        )
-        # Форматируем дату для JSON
+        card_df_copy['Abs_Summa_platezha'] = card_df_copy['Сумма платежа'].abs()
+        top_transactions_df = card_df_copy.nlargest(5, 'Abs_Summa_platezha')
+        top_transactions = top_transactions_df[
+            ['Дата операции', 'Сумма платежа', 'Категория', 'Описание']
+        ].to_dict('records')
+        # Форматируем дату
         for t in top_transactions:
-            t["Дата операции"] = (
-                t["Дата операции"].strftime("%d.%m.%Y %H:%M:%S") if pd.notna(t["Дата операции"]) else None
-            )
-
-        cards_data.append(
-            {
-                "last_digits": last_digits,
-                "total_spent": round(total_spent, 2),
-                "cashback": cashback,
-                "top_transactions": top_transactions,
-            }
-        )
+            t['Дата операции'] = t['Дата операции'].strftime('%d.%m.%Y %H:%M:%S') if pd.notna(t['Дата операции']) else None
+        
+        cards_data.append({
+            "last_digits": last_digits,
+            "total_spent": round(total_spent, 2),
+            "cashback": int(cashback),
+            "top_transactions": top_transactions
+        })
     return cards_data
