@@ -3,8 +3,14 @@ from datetime import datetime
 
 import pandas as pd
 
-from src.utils import (calculate_card_stats, filter_transactions_by_date, get_currency_rates, get_greeting,
-                       get_stock_prices, load_user_settings)
+from src.utils import (
+    calculate_card_stats,
+    filter_transactions_by_date,
+    get_currency_rates,
+    get_greeting,
+    get_stock_prices,
+    load_user_settings,
+)
 
 logger = logging.getLogger(__name__)
 
